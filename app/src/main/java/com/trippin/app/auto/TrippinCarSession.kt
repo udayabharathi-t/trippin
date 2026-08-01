@@ -99,7 +99,7 @@ class TrippinCarScreen(
     private fun buildDisplayText(): Pair<String, String> {
         val live = stats
         if (live == null) {
-            return "Trippin" to statusLine
+            return hostContext.getString(R.string.app_name) to statusLine
         }
 
         if (live.estimatedFuelCostInr != null && live.estimatedFuelCostInr > 0f) {

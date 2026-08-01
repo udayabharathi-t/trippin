@@ -1,4 +1,4 @@
-# Trippin
+# Trippin'
 
 Trippin' is an Android Auto app that automatically tracks car trips and lets you tag and manage them on your phone.
 

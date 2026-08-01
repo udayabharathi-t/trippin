@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.trippin.app.R
 import com.trippin.app.di.AppContainer
 import com.trippin.app.tracking.TripLiveStats
 import com.trippin.app.ui.components.TripCard
@@ -51,7 +53,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text("Trippin", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
             Text(
                 "Auto-tracks trips when Android Auto is connected",
                 style = MaterialTheme.typography.bodyMedium,
