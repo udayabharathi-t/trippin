@@ -54,7 +54,7 @@ fun SettingsScreen(container: AppContainer) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("About", style = MaterialTheme.typography.titleMedium)
-                Text("${stringResource(R.string.app_name)} v1.0.2")
+                Text("${stringResource(R.string.app_name)} v1.0.3")
                 Text(
                     "Automatically records trips when Android Auto is connected.",
                     style = MaterialTheme.typography.bodyMedium

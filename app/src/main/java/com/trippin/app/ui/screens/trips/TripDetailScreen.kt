@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +43,7 @@ fun TripDetailScreen(
     onBack: () -> Unit
 ) {
     val trip by container.tripRepository.observeById(tripId).collectAsState(initial = null)
+    val stops by container.tripRepository.observeStopsForTrip(tripId).collectAsState(initial = emptyList())
     var name by remember { mutableStateOf("") }
     var startLocationName by remember { mutableStateOf("") }
     var endLocationName by remember { mutableStateOf("") }
@@ -131,6 +134,39 @@ fun TripDetailScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            if (stops.isNotEmpty()) {
+                Text("Midway stops", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "${stops.size} stop${if (stops.size == 1) "" else "s"} from merged segments",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                stops.forEach { stop ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                stop.label ?: "Stop ${stop.orderIndex + 1}",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(Formatters.dateTime(stop.timestamp), style = MaterialTheme.typography.bodySmall)
+                            stop.locationName?.let { Text(it) }
+                            if (stop.latitude != null && stop.longitude != null) {
+                                Text(
+                                    "${"%.5f".format(stop.latitude)}, ${"%.5f".format(stop.longitude)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             LocationPickerField(

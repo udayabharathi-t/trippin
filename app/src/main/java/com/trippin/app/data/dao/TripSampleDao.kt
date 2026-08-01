@@ -26,6 +26,9 @@ interface TripSampleDao {
     """)
     suspend fun getLatestFuelSampleForCar(carId: String): TripSample?
 
+    @Query("UPDATE trip_samples SET tripId = :newTripId WHERE tripId IN (:oldTripIds)")
+    suspend fun reassignTrips(oldTripIds: List<String>, newTripId: String)
+
     @Query("DELETE FROM trip_samples WHERE tripId = :tripId")
     suspend fun deleteForTrip(tripId: String)
 }
