@@ -13,7 +13,7 @@ import com.trippin.app.data.model.TripSample
 
 @Database(
     entities = [Car::class, Trip::class, RefuelEvent::class, TripSample::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class TrippinDatabase : RoomDatabase() {

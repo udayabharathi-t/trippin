@@ -3,6 +3,7 @@ package com.trippin.app.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Settings
@@ -67,7 +68,7 @@ fun TrippinNavHost(container: AppContainer) {
                             icon = {
                                 Icon(
                                     imageVector = when (item) {
-                                        BottomNavItem.Home -> Icons.Default.Route
+                                        BottomNavItem.Home -> Icons.Default.Home
                                         BottomNavItem.Trips -> Icons.Default.Route
                                         BottomNavItem.Refuel -> Icons.Default.LocalGasStation
                                         BottomNavItem.Cars -> Icons.Default.DirectionsCar
