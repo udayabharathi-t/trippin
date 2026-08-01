@@ -13,8 +13,8 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.aab
-*.apk
 output-metadata.json
+!releases/*.apk
 
 # IntelliJ
 *.iml
@@ -32,3 +32,6 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Local Android SDK (CI/dev only)
+android-sdk/
