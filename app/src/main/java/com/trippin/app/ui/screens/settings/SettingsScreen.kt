@@ -13,6 +13,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.trippin.app.R
 import com.trippin.app.di.AppContainer
 
 @Composable
@@ -52,7 +54,7 @@ fun SettingsScreen(container: AppContainer) {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("About", style = MaterialTheme.typography.titleMedium)
-                Text("Trippin v1.0.0")
+                Text("${stringResource(R.string.app_name)} v1.0.2")
                 Text(
                     "Automatically records trips when Android Auto is connected.",
                     style = MaterialTheme.typography.bodyMedium

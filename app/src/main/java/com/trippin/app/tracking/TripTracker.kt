@@ -10,6 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -27,6 +30,9 @@ class TripTracker(
     private var lastFuelPercent: Float? = null
     private var lastHardwareId: String? = null
 
+    private val _liveStats = MutableStateFlow<TripLiveStats?>(null)
+    val liveStats: StateFlow<TripLiveStats?> = _liveStats.asStateFlow()
+
     companion object {
         private const val SAMPLE_INTERVAL_MS = 30_000L
         private const val REFUEL_THRESHOLD_PERCENT = 8f
@@ -41,22 +47,7 @@ class TripTracker(
             val trip = tripRepository.startTrip(car.id, autoStarted = true)
             activeTripId = trip.id
 
-            val snapshot = vehicleDataProvider.captureSnapshot()
-            lastFuelPercent = snapshot.fuelPercent
-
-            tripRepository.updateTripFromSample(
-                trip.id,
-                TripSample(
-                    tripId = trip.id,
-                    timestamp = System.currentTimeMillis(),
-                    odometerKm = snapshot.odometerKm,
-                    fuelPercent = snapshot.fuelPercent,
-                    speedKmh = snapshot.speedKmh,
-                    latitude = snapshot.latitude,
-                    longitude = snapshot.longitude
-                )
-            )
-
+            syncNow()
             startSampling()
         }
     }
@@ -73,24 +64,31 @@ class TripTracker(
             activeTripId = null
             activeCarId = null
             lastFuelPercent = null
+            _liveStats.value = null
         }
     }
 
     fun isTracking(): Boolean = activeTripId != null
 
-    private fun startSampling() {
-        samplingJob?.cancel()
-        samplingJob = scope.launch {
-            while (isActive && activeTripId != null) {
-                delay(SAMPLE_INTERVAL_MS)
-                captureSample()
-            }
+    /**
+     * Manually sync with the car — captures a fresh sensor/GPS reading and
+     * recomputes live trip metrics (cost, speeds, fuel economy).
+     */
+    suspend fun syncNow(): TripLiveStats? {
+        val tripId = activeTripId
+        val carId = activeCarId
+
+        if (tripId != null && carId != null) {
+            return captureAndRefresh(tripId, carId)
         }
+
+        val activeTrip = tripRepository.getActiveTrip() ?: return null
+        activeTripId = activeTrip.id
+        activeCarId = activeTrip.carId
+        return captureAndRefresh(activeTrip.id, activeTrip.carId)
     }
 
-    private suspend fun captureSample() {
-        val tripId = activeTripId ?: return
-        val carId = activeCarId ?: return
+    private suspend fun captureAndRefresh(tripId: String, carId: String): TripLiveStats? {
         val snapshot = vehicleDataProvider.captureSnapshot()
 
         tripRepository.updateTripFromSample(
@@ -108,6 +106,28 @@ class TripTracker(
 
         detectRefuel(carId, snapshot.fuelPercent, snapshot.odometerKm)
         lastFuelPercent = snapshot.fuelPercent ?: lastFuelPercent
+
+        val updated = tripRepository.refreshActiveTripMetrics(
+            tripId = tripId,
+            currentFuelPercent = snapshot.fuelPercent,
+            currentOdometerKm = snapshot.odometerKm
+        ) ?: return null
+
+        val stats = tripRepository.buildLiveStats(updated, snapshot.fuelPercent)
+        _liveStats.value = stats
+        return stats
+    }
+
+    private fun startSampling() {
+        samplingJob?.cancel()
+        samplingJob = scope.launch {
+            while (isActive && activeTripId != null) {
+                delay(SAMPLE_INTERVAL_MS)
+                val tripId = activeTripId ?: continue
+                val carId = activeCarId ?: continue
+                captureAndRefresh(tripId, carId)
+            }
+        }
     }
 
     private suspend fun detectRefuel(carId: String, currentFuel: Float?, odometerKm: Float?) {

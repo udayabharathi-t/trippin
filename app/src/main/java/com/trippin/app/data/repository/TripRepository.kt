@@ -4,8 +4,10 @@ import com.trippin.app.data.dao.CarDao
 import com.trippin.app.data.dao.RefuelDao
 import com.trippin.app.data.dao.TripDao
 import com.trippin.app.data.dao.TripSampleDao
+import com.trippin.app.data.model.Car
 import com.trippin.app.data.model.Trip
 import com.trippin.app.data.model.TripSample
+import com.trippin.app.tracking.TripLiveStats
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import kotlin.math.max
@@ -68,6 +70,70 @@ class TripRepository(
                 isActive = false
             )
         )
+    }
+
+    suspend fun getActiveTrip(): Trip? = tripDao.getActiveTrip()
+
+    suspend fun refreshActiveTripMetrics(
+        tripId: String,
+        currentFuelPercent: Float?,
+        currentOdometerKm: Float?
+    ): Trip? {
+        val trip = tripDao.getById(tripId) ?: return null
+        val samples = sampleDao.getForTrip(tripId)
+        val endFuel = currentFuelPercent ?: samples.lastOrNull()?.fuelPercent
+        val endOdo = currentOdometerKm ?: samples.lastOrNull()?.odometerKm
+
+        val distance = computeDistanceKm(trip, samples, endOdo)
+        val elapsedHours = (System.currentTimeMillis() - trip.startTime) / 3_600_000f
+        val avgSpeed = if (elapsedHours > 0f) distance / elapsedHours else trip.averageSpeedKmh
+        val maxSpeed = max(
+            trip.maxSpeedKmh,
+            samples.mapNotNull { it.speedKmh }.maxOrNull() ?: 0f
+        )
+        val fuelCost = estimateFuelCost(trip.carId, trip.startFuelPercent, endFuel)
+        val lastLocation = samples.lastOrNull { it.latitude != null }
+
+        val updated = trip.copy(
+            endFuelPercent = endFuel,
+            endOdometerKm = endOdo,
+            distanceKm = distance,
+            averageSpeedKmh = avgSpeed,
+            maxSpeedKmh = maxSpeed,
+            estimatedFuelCostInr = fuelCost?.first,
+            fuelPricePerLitreInr = fuelCost?.second,
+            endLatitude = lastLocation?.latitude ?: trip.endLatitude,
+            endLongitude = lastLocation?.longitude ?: trip.endLongitude
+        )
+        tripDao.update(updated)
+        return updated
+    }
+
+    suspend fun buildLiveStats(trip: Trip, currentFuelPercent: Float? = null): TripLiveStats {
+        val car = carDao.getById(trip.carId)
+        val fuelPercent = currentFuelPercent ?: trip.endFuelPercent
+        return TripLiveStats(
+            tripId = trip.id,
+            estimatedFuelCostInr = trip.estimatedFuelCostInr,
+            fuelPricePerLitreInr = trip.fuelPricePerLitreInr,
+            maxSpeedKmh = trip.maxSpeedKmh,
+            averageSpeedKmh = trip.averageSpeedKmh,
+            fuelEconomyKmPerLitre = computeFuelEconomyKmPerLitre(trip, car, fuelPercent),
+            distanceKm = trip.distanceKm,
+            currentFuelPercent = fuelPercent,
+            lastSyncedAt = System.currentTimeMillis()
+        )
+    }
+
+    fun computeFuelEconomyKmPerLitre(trip: Trip, car: Car?, fuelPercent: Float?): Float? {
+        val start = trip.startFuelPercent ?: return null
+        val end = fuelPercent ?: trip.endFuelPercent ?: return null
+        val capacity = car?.maxFuelCapacityLitres ?: return null
+        if (start <= end || trip.distanceKm <= 0f) return null
+
+        val litresUsed = ((start - end) / 100f) * capacity
+        if (litresUsed <= 0f) return null
+        return trip.distanceKm / litresUsed
     }
 
     suspend fun updateTrip(trip: Trip) = tripDao.update(trip)

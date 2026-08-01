@@ -1,10 +1,10 @@
-# Trippin
+# Trippin'
 
 Trippin' is an Android Auto app that automatically tracks car trips and lets you tag and manage them on your phone.
 
 ## Download
 
-Grab the latest APK from [GitHub Releases](https://github.com/udayabharathi-t/trippin/releases).
+Grab the latest APK from [GitHub Releases](https://github.com/udayabharathi-t/trippin/releases) or `releases/trippin-v1.0.1.apk`.
 
 ## Features
 
