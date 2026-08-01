@@ -1,5 +1,6 @@
 package com.trippin.app.service
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,10 +8,12 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.trippin.app.R
 import com.trippin.app.TrippinApplication
+import com.trippin.app.auto.TripStartNotifier
 import com.trippin.app.ui.MainActivity
 
 class TripTrackingService : Service() {
@@ -84,6 +87,22 @@ class TripTrackingService : Service() {
         putExtra(EXTRA_VIN, vin)
       }
       context.startForegroundService(intent)
+    }
+
+    fun startSafely(context: Context, hardwareId: String, vin: String? = null) {
+      try {
+        start(context, hardwareId, vin)
+      } catch (e: Exception) {
+        val blocked = e is ForegroundServiceStartNotAllowedException ||
+          (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            e is IllegalStateException &&
+            e.message?.contains("ForegroundServiceStartNotAllowed", ignoreCase = true) == true)
+        if (blocked) {
+          TripStartNotifier.showTapToStart(context)
+        } else {
+          throw e
+        }
+      }
     }
 
     fun stop(context: Context) {
