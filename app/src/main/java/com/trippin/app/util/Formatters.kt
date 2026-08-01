@@ -16,4 +16,5 @@ object Formatters {
     fun speed(value: Float): String = "${"%.0f".format(value)} km/h"
     fun percent(value: Float): String = "${"%.0f".format(value)}%"
     fun inr(value: Float): String = "₹${"%.2f".format(value)}"
+    fun fuelEconomy(kmPerLitre: Float): String = "${"%.1f".format(kmPerLitre)} km/L"
 }

@@ -4,22 +4,34 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trippin.app.di.AppContainer
+import com.trippin.app.tracking.TripLiveStats
 import com.trippin.app.ui.components.TripCard
 import com.trippin.app.util.Formatters
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -27,7 +39,11 @@ fun HomeScreen(
     onTripClick: (String) -> Unit
 ) {
     val activeTrip by container.tripRepository.observeActiveTrip().collectAsState(initial = null)
+    val liveStats by container.tripTracker.liveStats.collectAsState()
     val recentTrips by container.tripRepository.observeAll().collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    var syncing by remember { mutableStateOf(false) }
+    var syncMessage by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -45,11 +61,34 @@ fun HomeScreen(
 
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Active trip", style = MaterialTheme.typography.titleMedium)
                     if (activeTrip != null) {
                         Text("Recording since ${Formatters.time(activeTrip!!.startTime)}")
-                        Text("Tap Trips for details")
+                        ActiveTripStats(liveStats)
+                        Button(
+                            onClick = {
+                                syncing = true
+                                syncMessage = null
+                                scope.launch {
+                                    val result = container.tripTracker.syncNow()
+                                    syncing = false
+                                    syncMessage = if (result != null) {
+                                        "Synced at ${Formatters.time(result.lastSyncedAt)}"
+                                    } else {
+                                        "Could not sync — no active trip"
+                                    }
+                                }
+                            },
+                            enabled = !syncing,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null)
+                            Text(if (syncing) " Syncing…" else " Sync with car")
+                        }
+                        syncMessage?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
                     } else {
                         Text("No active trip — connect Android Auto to start")
                     }
@@ -66,6 +105,44 @@ fun HomeScreen(
                 trip = trip,
                 modifier = Modifier.clickable { onTripClick(trip.id) }
             )
+        }
+    }
+}
+
+@Composable
+private fun ActiveTripStats(stats: TripLiveStats?) {
+    if (stats == null) {
+        Text(
+            "Tap sync to pull latest data from your car",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    if (stats.estimatedFuelCostInr != null && stats.estimatedFuelCostInr > 0f) {
+        Text("Trip cost: ${Formatters.inr(stats.estimatedFuelCostInr)}")
+        Text(
+            "Approx. based on last refill · ${Formatters.km(stats.distanceKm)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text("Max: ${Formatters.speed(stats.maxSpeedKmh)}")
+            Text("Avg: ${Formatters.speed(stats.averageSpeedKmh)}")
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(Formatters.km(stats.distanceKm))
+            stats.fuelEconomyKmPerLitre?.let {
+                Text(Formatters.fuelEconomy(it))
+            }
         }
     }
 }
