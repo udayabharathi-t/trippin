@@ -4,9 +4,11 @@ import com.trippin.app.data.dao.CarDao
 import com.trippin.app.data.dao.RefuelDao
 import com.trippin.app.data.dao.TripDao
 import com.trippin.app.data.dao.TripSampleDao
+import com.trippin.app.data.dao.TripStopDao
 import com.trippin.app.data.model.Car
 import com.trippin.app.data.model.Trip
 import com.trippin.app.data.model.TripSample
+import com.trippin.app.data.model.TripStop
 import com.trippin.app.tracking.TripLiveStats
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
@@ -15,6 +17,7 @@ import kotlin.math.max
 class TripRepository(
     private val tripDao: TripDao,
     private val sampleDao: TripSampleDao,
+    private val stopDao: TripStopDao,
     private val refuelDao: RefuelDao,
     private val carDao: CarDao
 ) {
@@ -23,6 +26,10 @@ class TripRepository(
     fun observeByCar(carId: String): Flow<List<Trip>> = tripDao.observeByCar(carId)
 
     fun observeById(id: String): Flow<Trip?> = tripDao.observeById(id)
+
+    fun observeStopsForTrip(tripId: String): Flow<List<TripStop>> = stopDao.observeForTrip(tripId)
+
+    suspend fun getStopsForTrip(tripId: String): List<TripStop> = stopDao.getForTrip(tripId)
 
     fun observeActiveTrip(): Flow<Trip?> = tripDao.observeActiveTrip()
 
@@ -137,6 +144,109 @@ class TripRepository(
     }
 
     suspend fun updateTrip(trip: Trip) = tripDao.update(trip)
+
+    sealed class MergeResult {
+        data class Success(val trip: Trip) : MergeResult()
+        data class Error(val message: String) : MergeResult()
+    }
+
+    suspend fun mergeTrips(tripIds: List<String>): MergeResult {
+        if (tripIds.size < 2) {
+            return MergeResult.Error("Select at least 2 trips to merge")
+        }
+
+        val trips = tripDao.getByIds(tripIds)
+        if (trips.size < 2) {
+            return MergeResult.Error("Could not find selected trips")
+        }
+        if (trips.any { it.isActive }) {
+            return MergeResult.Error("Cannot merge an active trip")
+        }
+        if (trips.map { it.carId }.distinct().size > 1) {
+            return MergeResult.Error("Selected trips must belong to the same car")
+        }
+        if (trips.any { it.endTime == null }) {
+            return MergeResult.Error("All selected trips must be completed")
+        }
+
+        val sorted = trips.sortedBy { it.startTime }
+        val first = sorted.first()
+        val last = sorted.last()
+        val newId = UUID.randomUUID().toString()
+
+        val totalDistance = computeMergedDistance(sorted)
+        val startTime = first.startTime
+        val endTime = last.endTime!!
+        val durationHours = (endTime - startTime).coerceAtLeast(1L) / 3_600_000f
+        val avgSpeed = if (durationHours > 0f) totalDistance / durationHours else 0f
+        val maxSpeed = sorted.maxOf { it.maxSpeedKmh }
+        val fuelCost = estimateFuelCost(first.carId, first.startFuelPercent, last.endFuelPercent)
+
+        val mergedName = first.name?.let { name ->
+            if (sorted.size > 1) "$name (+${sorted.size - 1} segments)" else name
+        }
+
+        val merged = Trip(
+            id = newId,
+            carId = first.carId,
+            name = mergedName,
+            startTime = startTime,
+            endTime = endTime,
+            startOdometerKm = first.startOdometerKm,
+            endOdometerKm = last.endOdometerKm,
+            startFuelPercent = first.startFuelPercent,
+            endFuelPercent = last.endFuelPercent,
+            maxSpeedKmh = maxSpeed,
+            averageSpeedKmh = avgSpeed,
+            distanceKm = totalDistance,
+            startLatitude = first.startLatitude,
+            startLongitude = first.startLongitude,
+            startLocationName = first.startLocationName,
+            endLatitude = last.endLatitude,
+            endLongitude = last.endLongitude,
+            endLocationName = last.endLocationName,
+            estimatedFuelCostInr = fuelCost?.first,
+            fuelPricePerLitreInr = fuelCost?.second,
+            isActive = false,
+            autoStarted = false,
+            isMerged = true
+        )
+
+        val stops = sorted.dropLast(1).mapIndexed { index, trip ->
+            TripStop(
+                id = UUID.randomUUID().toString(),
+                tripId = newId,
+                orderIndex = index,
+                timestamp = trip.endTime ?: trip.startTime,
+                latitude = trip.endLatitude,
+                longitude = trip.endLongitude,
+                locationName = trip.endLocationName,
+                label = trip.name ?: "Stop ${index + 1}"
+            )
+        }
+
+        val oldIds = sorted.map { it.id }
+        sampleDao.reassignTrips(oldIds, newId)
+        oldIds.forEach { tripDao.delete(it) }
+
+        tripDao.insert(merged)
+        if (stops.isNotEmpty()) {
+            stopDao.insertAll(stops)
+        }
+
+        return MergeResult.Success(merged)
+    }
+
+    private fun computeMergedDistance(trips: List<Trip>): Float {
+        val first = trips.first()
+        val last = trips.last()
+        val startOdo = first.startOdometerKm
+        val endOdo = last.endOdometerKm
+        if (startOdo != null && endOdo != null && endOdo >= startOdo) {
+            return endOdo - startOdo
+        }
+        return trips.sumOf { it.distanceKm.toDouble() }.toFloat()
+    }
 
     suspend fun addSample(sample: TripSample) = sampleDao.insert(sample)
 

@@ -43,6 +43,9 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE carId = :carId ORDER BY startTime DESC LIMIT 1")
     suspend fun getLatestForCar(carId: String): Trip?
 
+    @Query("SELECT * FROM trips WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<String>): List<Trip>
+
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun delete(id: String)
 }

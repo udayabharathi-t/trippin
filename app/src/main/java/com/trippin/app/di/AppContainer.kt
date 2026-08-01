@@ -18,13 +18,14 @@ class AppContainer(context: Context) {
         appContext,
         TrippinDatabase::class.java,
         "trippin.db"
-    ).addMigrations(MIGRATION_1_2).build()
+    ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
     val carRepository = CarRepository(database.carDao())
     val vehicleDataProvider = VehicleDataProvider(appContext)
     val tripRepository = TripRepository(
         tripDao = database.tripDao(),
         sampleDao = database.tripSampleDao(),
+        stopDao = database.tripStopDao(),
         refuelDao = database.refuelDao(),
         carDao = database.carDao()
     )
@@ -77,6 +78,28 @@ class AppContainer(context: Context) {
                 db.execSQL("ALTER TABLE refuel_events_new RENAME TO refuel_events")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_refuel_events_carId ON refuel_events(carId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_refuel_events_timestamp ON refuel_events(timestamp)")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE trips ADD COLUMN isMerged INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS trip_stops (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        tripId TEXT NOT NULL,
+                        orderIndex INTEGER NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        latitude REAL,
+                        longitude REAL,
+                        locationName TEXT,
+                        label TEXT,
+                        FOREIGN KEY(tripId) REFERENCES trips(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_stops_tripId ON trip_stops(tripId)")
             }
         }
     }

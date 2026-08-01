@@ -39,5 +39,6 @@ data class Trip(
     val estimatedFuelCostInr: Float? = null,
     val fuelPricePerLitreInr: Float? = null,
     val isActive: Boolean = false,
-    val autoStarted: Boolean = false
+    val autoStarted: Boolean = false,
+    val isMerged: Boolean = false
 )
