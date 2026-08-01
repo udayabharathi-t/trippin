@@ -17,6 +17,15 @@ interface TripSampleDao {
     @Query("SELECT * FROM trip_samples ORDER BY tripId, timestamp ASC")
     suspend fun getAll(): List<TripSample>
 
+    @Query("""
+        SELECT ts.* FROM trip_samples ts
+        INNER JOIN trips t ON t.id = ts.tripId
+        WHERE t.carId = :carId AND ts.fuelPercent IS NOT NULL
+        ORDER BY ts.timestamp DESC
+        LIMIT 1
+    """)
+    suspend fun getLatestFuelSampleForCar(carId: String): TripSample?
+
     @Query("DELETE FROM trip_samples WHERE tripId = :tripId")
     suspend fun deleteForTrip(tripId: String)
 }

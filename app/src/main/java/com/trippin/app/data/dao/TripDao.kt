@@ -40,6 +40,9 @@ interface TripDao {
     @Query("SELECT * FROM trips ORDER BY startTime DESC")
     suspend fun getAllOnce(): List<Trip>
 
+    @Query("SELECT * FROM trips WHERE carId = :carId ORDER BY startTime DESC LIMIT 1")
+    suspend fun getLatestForCar(carId: String): Trip?
+
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun delete(id: String)
 }
