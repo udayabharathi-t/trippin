@@ -43,11 +43,10 @@ fun RefuelScreen(container: AppContainer) {
     }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
-    var fuelBefore by remember { mutableStateOf("") }
-    var fuelAfter by remember { mutableStateOf("") }
     var pricePerLitre by remember { mutableStateOf("") }
     var totalCost by remember { mutableStateOf("") }
     var tag by remember { mutableStateOf("") }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -57,6 +56,11 @@ fun RefuelScreen(container: AppContainer) {
     ) {
         item {
             Text("Refuel events", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Fuel level before/after is captured automatically from your car when available.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         item {
@@ -87,45 +91,59 @@ fun RefuelScreen(container: AppContainer) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Add refuel", style = MaterialTheme.typography.titleMedium)
-                    OutlinedTextField(fuelBefore, { fuelBefore = it }, label = { Text("Fuel % before") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(fuelAfter, { fuelAfter = it }, label = { Text("Fuel % after") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(pricePerLitre, { pricePerLitre = it }, label = { Text("Price per litre (₹)") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(totalCost, { totalCost = it }, label = { Text("Total cost (₹)") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(tag, { tag = it }, label = { Text("Tag (optional)") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = pricePerLitre,
+                        onValueChange = { pricePerLitre = it },
+                        label = { Text("Price per litre (₹)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = totalCost,
+                        onValueChange = { totalCost = it },
+                        label = { Text("Total cost (₹)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = tag,
+                        onValueChange = { tag = it },
+                        label = { Text("Tag (optional)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                    val car = selectedCar
-                    val before = fuelBefore.toFloatOrNull()
-                    val after = fuelAfter.toFloatOrNull()
-                    if (car != null && before != null && after != null) {
-                        val litres = ((after - before).coerceAtLeast(0f) / 100f) * car.maxFuelCapacityLitres
-                        Text("Approx. litres filled: ${"%.1f".format(litres)} L")
+                    val price = pricePerLitre.toFloatOrNull()
+                    val cost = totalCost.toFloatOrNull()
+                    if (price != null && cost != null && price > 0f) {
+                        Text("Approx. litres filled: ${"%.1f".format(cost / price)} L")
                     }
 
                     TextButton(
                         onClick = {
                             val carId = selectedCar?.id ?: return@TextButton
-                            val b = fuelBefore.toFloatOrNull() ?: return@TextButton
-                            val a = fuelAfter.toFloatOrNull() ?: return@TextButton
-                            val price = pricePerLitre.toFloatOrNull() ?: 0f
-                            val cost = totalCost.toFloatOrNull() ?: 0f
+                            val priceValue = pricePerLitre.toFloatOrNull() ?: return@TextButton
+                            val costValue = totalCost.toFloatOrNull() ?: return@TextButton
                             scope.launch {
-                                container.refuelRepository.recordRefuel(
+                                val saved = container.refuelRepository.recordManualRefuel(
                                     carId = carId,
-                                    fuelPercentBefore = b,
-                                    fuelPercentAfter = a,
-                                    fuelPricePerLitreInr = price,
-                                    totalCostInr = cost,
+                                    fuelPricePerLitreInr = priceValue,
+                                    totalCostInr = costValue,
                                     tag = tag.ifBlank { null }
                                 )
-                                fuelBefore = ""
-                                fuelAfter = ""
-                                pricePerLitre = ""
-                                totalCost = ""
-                                tag = ""
+                                if (saved != null) {
+                                    statusMessage = buildSavedMessage(saved)
+                                    pricePerLitre = ""
+                                    totalCost = ""
+                                    tag = ""
+                                } else {
+                                    statusMessage = "Could not save — enter a valid price and total cost."
+                                }
                             }
                         },
                         enabled = selectedCar != null
                     ) { Text("Save refuel") }
+
+                    statusMessage?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }
@@ -136,12 +154,34 @@ fun RefuelScreen(container: AppContainer) {
     }
 }
 
+private fun buildSavedMessage(event: RefuelEvent): String {
+    val fuelNote = when {
+        event.fuelPercentBefore != null && event.fuelPercentAfter != null ->
+            "Fuel auto-captured: ${event.fuelPercentBefore.toInt()}% → ${event.fuelPercentAfter.toInt()}%."
+        event.fuelPercentAfter != null ->
+            "Fuel after refill auto-captured at ${event.fuelPercentAfter.toInt()}%."
+        else ->
+            "Fuel level unavailable — litres estimated from cost."
+    }
+    return "Refuel saved. $fuelNote"
+}
+
 @Composable
 private fun RefuelEventCard(event: RefuelEvent) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(Formatters.dateTime(event.timestamp), style = MaterialTheme.typography.titleSmall)
-            Text("Fuel: ${Formatters.percent(event.fuelPercentBefore)} → ${Formatters.percent(event.fuelPercentAfter)}")
+            when {
+                event.fuelPercentBefore != null && event.fuelPercentAfter != null -> {
+                    Text(
+                        "Fuel: ${Formatters.percent(event.fuelPercentBefore)} → " +
+                            Formatters.percent(event.fuelPercentAfter)
+                    )
+                }
+                event.fuelPercentAfter != null -> {
+                    Text("Fuel after: ${Formatters.percent(event.fuelPercentAfter)}")
+                }
+            }
             Text("Litres: ${"%.1f".format(event.litresFilled)} L")
             Text("Price: ${Formatters.inr(event.fuelPricePerLitreInr)}/L · Total: ${Formatters.inr(event.totalCostInr)}")
             event.tag?.let { Text("Tag: $it") }

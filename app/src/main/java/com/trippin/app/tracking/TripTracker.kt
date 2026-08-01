@@ -30,6 +30,7 @@ class TripTracker(
     companion object {
         private const val SAMPLE_INTERVAL_MS = 30_000L
         private const val REFUEL_THRESHOLD_PERCENT = 8f
+        private const val MIN_LITRES_FROM_AUTO = 0.5f
     }
 
     fun startForHardware(hardwareId: String, vin: String? = null) {
@@ -117,13 +118,18 @@ class TripTracker(
         if (current - previous >= REFUEL_THRESHOLD_PERCENT) {
             val latestRefuel = refuelRepository.getLatestForCar(carId)
             val price = latestRefuel?.fuelPricePerLitreInr ?: 0f
+            val car = carRepository.getById(carId) ?: return
+            val litres = ((current - previous) / 100f) * car.maxFuelCapacityLitres
+            if (litres < MIN_LITRES_FROM_AUTO) return
+
+            val totalCost = if (price > 0f) litres * price else 0f
 
             refuelRepository.recordRefuel(
                 carId = carId,
                 fuelPercentBefore = previous,
                 fuelPercentAfter = current,
                 fuelPricePerLitreInr = price,
-                totalCostInr = 0f,
+                totalCostInr = totalCost,
                 tag = "Auto-detected",
                 odometerKm = odometerKm,
                 isAutoDetected = true
