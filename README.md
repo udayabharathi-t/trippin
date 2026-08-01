@@ -17,17 +17,23 @@ Grab the latest APK from [GitHub Releases](https://github.com/udayabharathi-t/tr
 
 ## Android Auto setup
 
-Trip recording starts automatically when Android Auto connects — you do **not** need to open Trippin from the car launcher for tracking to work.
+### Trip tracking (works with sideloaded APK)
 
-To show Trippin in the car app drawer (and in **Customize launcher** on your phone), sideloaded APKs require Android Auto developer mode:
+Trip recording starts automatically when Android Auto connects — you do **not** need Trippin to appear in the car launcher. After connecting to your car, you should see a persistent **"Recording trip…"** notification on your phone. When you disconnect, check the **Trips** tab in the Trippin app on your phone.
 
-1. Open **Android Auto** on your phone → **Settings** → tap **Version** 10 times to enable developer mode
-2. In **Developer settings**, enable **Unknown sources**
-3. Uninstall the old Trippin APK, then install the latest release APK
-4. Force-stop Android Auto (Settings → Apps → Android Auto → Force stop), then reconnect to your car
-5. On your phone: Android Auto → **Customize launcher** — Trippin should now appear in the list
+### Car screen UI (requires Play Store install)
 
-**Note:** Google officially limits Car App Library apps on real head units to Play Store distribution. The steps above work for sideloaded installs in most cases, but some car units may still hide non-Play-Store apps. Trip tracking in the background is unaffected.
+Trippin uses Google's **Android for Cars App Library**. Google explicitly blocks Car App Library apps from appearing on real car head units unless they are installed from a **trusted source** (Google Play).
+
+The Android Auto **Unknown sources** developer setting only applies to media and messaging apps — **it does not apply to Trippin**. Enabling it, reinstalling, or force-stopping Android Auto will not make Trippin appear in **Customize launcher** when installed from a GitHub APK.
+
+To get Trippin on your car screen:
+
+1. Publish the app to Google Play **Internal testing** (free, no public review required)
+2. Add yourself as a tester and install Trippin from the Play Store testing link
+3. Trippin should then appear in **Customize launcher**
+
+For development without Play Store, use Google's [Desktop Head Unit (DHU)](https://developer.android.com/training/cars/testing/dhu).
 
 ## Build from source
 
