@@ -70,6 +70,18 @@ class TripTracker(
 
     fun isTracking(): Boolean = activeTripId != null
 
+    suspend fun stopIfActive() {
+        if (activeTripId != null) {
+            stopTracking()
+            return
+        }
+
+        val activeTrip = tripRepository.getActiveTrip() ?: return
+        activeTripId = activeTrip.id
+        activeCarId = activeTrip.carId
+        stopTracking()
+    }
+
     /**
      * Manually sync with the car — captures a fresh sensor/GPS reading and
      * recomputes live trip metrics (cost, speeds, fuel economy).

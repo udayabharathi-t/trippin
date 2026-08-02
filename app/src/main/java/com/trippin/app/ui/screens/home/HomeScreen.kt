@@ -29,7 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.trippin.app.R
+import androidx.compose.ui.platform.LocalContext
+import com.trippin.app.TrippinApplication
 import com.trippin.app.di.AppContainer
+import com.trippin.app.util.PermissionsHelper
 import com.trippin.app.tracking.TripLiveStats
 import com.trippin.app.ui.components.TripCard
 import com.trippin.app.util.Formatters
@@ -40,6 +43,10 @@ fun HomeScreen(
     container: AppContainer,
     onTripClick: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val app = context.applicationContext as TrippinApplication
+    val aaConnected by app.carConnectionMonitor.isAndroidAutoConnected.collectAsState()
+    val hasPermissions = PermissionsHelper.hasAllRequired(context)
     val activeTrip by container.tripRepository.observeActiveTrip().collectAsState(initial = null)
     val liveStats by container.tripTracker.liveStats.collectAsState()
     val recentTrips by container.tripRepository.observeAll().collectAsState(initial = emptyList())
@@ -59,6 +66,26 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Connection", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        when {
+                            !hasPermissions -> "Location permission required"
+                            aaConnected -> "Android Auto connected"
+                            else -> "Android Auto not connected"
+                        },
+                        color = when {
+                            !hasPermissions -> MaterialTheme.colorScheme.error
+                            aaConnected -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
         }
 
         item {
@@ -90,6 +117,16 @@ fun HomeScreen(
                         }
                         syncMessage?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else if (aaConnected && hasPermissions) {
+                        Text("Android Auto is connected but not recording yet")
+                        Button(
+                            onClick = {
+                                app.carConnectionMonitor.checkAndStartIfConnected(fromUserAction = true)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Start trip now")
                         }
                     } else {
                         Text("No active trip — connect Android Auto to start")

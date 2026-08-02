@@ -10,9 +10,10 @@ import androidx.car.app.Session
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarIcon
+import androidx.car.app.model.Pane
+import androidx.car.app.model.PaneTemplate
+import androidx.car.app.model.Row
 import androidx.car.app.model.Template
-import androidx.car.app.navigation.model.MessageInfo
-import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -35,8 +36,7 @@ class TrippinCarSession : Session() {
 }
 
 /**
- * Android Auto screen using NavigationTemplate (multi-pane top-left slot) with
- * PaneTemplate rows for detailed trip stats. Sync action pulls fresh car data.
+ * Android Auto screen using PaneTemplate for trip stats. Sync action pulls fresh car data.
  */
 class TrippinCarScreen(
     private val hostContext: CarContext
@@ -85,14 +85,18 @@ class TrippinCarScreen(
 
         val (primary, secondary) = buildDisplayText()
 
-        // NavigationTemplate targets the multi-pane navigation slot (top-left on most head units).
-        return NavigationTemplate.Builder()
+        val row = Row.Builder()
+            .setTitle(primary)
+            .addText(secondary)
+            .build()
+
+        val pane = Pane.Builder()
+            .addRow(row)
+            .build()
+
+        return PaneTemplate.Builder(pane)
+            .setTitle(hostContext.getString(R.string.app_name))
             .setActionStrip(actionStrip)
-            .setNavigationInfo(
-                MessageInfo.Builder(primary)
-                    .setText(secondary)
-                    .build()
-            )
             .build()
     }
 
