@@ -21,14 +21,11 @@ Grab the latest APK from [GitHub Releases](https://github.com/udayabharathi-t/tr
 
 1. **Open Trippin once** after installing and grant **Location** and **Notifications** when prompted
 2. Connect Android Auto to your car
-3. Either:
-   - Open Trippin on your phone (it auto-starts recording when AA is connected), or
-   - Tap the **"Android Auto connected — Tap to start trip recording"** notification, or
-   - On the Home screen, tap **Start trip now** when it shows Android Auto connected
+3. Start recording (open Trippin on phone, tap the notification, or tap **Start trip now**)
+4. **For odometer & fuel from your car:** open Trippin on the **car screen** (Android Auto app drawer) and approve **Fuel** and **Mileage** permissions when asked. This only works if Trippin is installed from Play Store internal testing — sideloaded APKs cannot open on the car screen.
+5. Without car sensor permissions, **distance is estimated from GPS**; fuel must be entered manually on the Refuel tab.
 
 You should see a persistent **"Recording trip…"** notification while driving. Trips appear in the **Trips** tab after you disconnect.
-
-**Why open the app?** Android blocks background apps from starting location tracking when AA connects. Trippin works around this by prompting you to open the app (or doing it automatically if already open).
 
 ### Car screen UI (requires Play Store install)
 

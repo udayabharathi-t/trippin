@@ -1,7 +1,6 @@
 package com.trippin.app.auto
 
 import android.content.Intent
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.car.app.CarContext
@@ -28,9 +27,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class TrippinCarSession : Session() {
+    private var hardwareCollector: CarHardwareCollector? = null
+
     override fun onCreateScreen(intent: Intent): Screen {
-        val hardwareId = "aa_${Build.MODEL}_${Build.DEVICE}"
-        TripTrackingService.start(carContext, hardwareId)
+        hardwareCollector = CarHardwareCollector(carContext, this).also { it.start() }
+        TripTrackingService.start(carContext, CarHardwareIds.resolve())
         return TrippinCarScreen(carContext)
     }
 }
