@@ -12,6 +12,7 @@ import com.trippin.app.data.model.TripStop
 import com.trippin.app.tracking.TripLiveStats
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
+import com.trippin.app.util.GeoUtils
 import kotlin.math.max
 
 class TripRepository(
@@ -291,6 +292,17 @@ class TripRepository(
         if (startOdo != null && endOdo != null && endOdo >= startOdo) {
             return endOdo - startOdo
         }
+
+        val gpsPoints = samples.mapNotNull { sample ->
+            if (sample.latitude != null && sample.longitude != null) {
+                sample.latitude to sample.longitude
+            } else {
+                null
+            }
+        }
+        val gpsDistance = GeoUtils.pathDistanceKm(gpsPoints)
+        if (gpsDistance > 0f) return gpsDistance
+
         return trip.distanceKm
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.trippin.app.TrippinApplication
 import com.trippin.app.di.AppContainer
 import com.trippin.app.util.PermissionsHelper
+import com.trippin.app.tracking.VehicleDataCache
 import com.trippin.app.tracking.TripLiveStats
 import com.trippin.app.ui.components.TripCard
 import com.trippin.app.util.Formatters
@@ -46,6 +47,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val app = context.applicationContext as TrippinApplication
     val aaConnected by app.carConnectionMonitor.isAndroidAutoConnected.collectAsState()
+    val carData by VehicleDataCache.state.collectAsState()
     val hasPermissions = PermissionsHelper.hasAllRequired(context)
     val activeTrip by container.tripRepository.observeActiveTrip().collectAsState(initial = null)
     val liveStats by container.tripTracker.liveStats.collectAsState()
@@ -84,6 +86,13 @@ fun HomeScreen(
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     )
+                    if (aaConnected && hasPermissions) {
+                        Text(
+                            carSensorStatus(carData, activeTrip),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -145,6 +154,23 @@ fun HomeScreen(
                 modifier = Modifier.clickable { onTripClick(trip.id) }
             )
         }
+    }
+}
+
+private fun carSensorStatus(
+    carData: VehicleDataCache.Snapshot,
+    activeTrip: com.trippin.app.data.model.Trip?
+): String {
+    val hasOdo = carData.odometerKm != null || activeTrip?.startOdometerKm != null
+    val hasFuel = carData.fuelPercent != null || activeTrip?.startFuelPercent != null
+
+    return when {
+        hasOdo && hasFuel -> "Car odometer and fuel data connected"
+        hasOdo -> "Odometer connected · fuel unavailable on this car"
+        hasFuel -> "Fuel connected · odometer unavailable on this car"
+        carData.hardwareAvailable -> "Waiting for car sensor data…"
+        else ->
+            "Distance uses GPS until you open Trippin on the car screen and grant Fuel/Mileage permissions"
     }
 }
 
