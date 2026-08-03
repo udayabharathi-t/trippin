@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trippin.app.data.model.Car
 import com.trippin.app.data.model.RefuelEvent
+import com.trippin.app.data.repository.RefuelRepository
 import com.trippin.app.di.AppContainer
 import com.trippin.app.util.Formatters
 import kotlinx.coroutines.launch
@@ -57,7 +58,7 @@ fun RefuelScreen(container: AppContainer) {
         item {
             Text("Refuel events", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Fuel level before/after is captured automatically from your car when available.",
+                "Log each full-tank refill (price + total cost). Fuel used since the last refill is split across trips by GPS distance.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -154,16 +155,17 @@ fun RefuelScreen(container: AppContainer) {
     }
 }
 
-private fun buildSavedMessage(event: RefuelEvent): String {
-    val fuelNote = when {
-        event.fuelPercentBefore != null && event.fuelPercentAfter != null ->
-            "Fuel auto-captured: ${event.fuelPercentBefore.toInt()}% → ${event.fuelPercentAfter.toInt()}%."
-        event.fuelPercentAfter != null ->
-            "Fuel after refill auto-captured at ${event.fuelPercentAfter.toInt()}%."
-        else ->
-            "Fuel level unavailable — litres estimated from cost."
+private fun buildSavedMessage(result: RefuelRepository.RefuelSaveResult): String {
+    val event = result.event
+    val allocationNote = result.periodSummaries.lastOrNull()?.let { summary ->
+        val economy = summary.avgKmPerLitre?.let { Formatters.fuelEconomy(it) } ?: "—"
+        " Updated ${summary.tripCount} trip(s) · ${Formatters.km(summary.totalDistanceKm)} · avg $economy."
+    } ?: " No completed trips in this tank period yet."
+
+    return buildString {
+        append("Refuel saved (${"%.1f".format(event.litresFilled)} L at ${Formatters.inr(event.fuelPricePerLitreInr)}/L).")
+        append(allocationNote)
     }
-    return "Refuel saved. $fuelNote"
 }
 
 @Composable

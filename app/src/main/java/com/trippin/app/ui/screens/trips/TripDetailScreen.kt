@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trippin.app.di.AppContainer
+import com.trippin.app.tracking.FuelAllocationCalculator
 import com.trippin.app.ui.components.LocationPickerField
 import com.trippin.app.util.Formatters
 import kotlinx.coroutines.launch
@@ -127,10 +128,20 @@ fun TripDetailScreen(
             Text("Avg speed: ${Formatters.speed(current.averageSpeedKmh)}")
             Text("Distance: ${Formatters.km(current.distanceKm)}")
 
-            current.estimatedFuelCostInr?.let { cost ->
-                Text("Estimated fuel cost: ${Formatters.inr(cost)}")
+            if (current.estimatedFuelCostInr != null) {
+                val cost = current.estimatedFuelCostInr
+                Text("Fuel cost: ${Formatters.inr(cost!!)}")
+                FuelAllocationCalculator.fuelEconomyKmPerLitre(current)?.let { kmPerL ->
+                    Text("Fuel economy: ${Formatters.fuelEconomy(kmPerL)}")
+                }
                 Text(
-                    "Approximately computed based on last fuel refill",
+                    "Allocated from full-tank refill, split by GPS distance across trips in that tank period",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (!current.isActive) {
+                Text(
+                    "Fuel cost pending — log the next full-tank refill to allocate cost across recent trips",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

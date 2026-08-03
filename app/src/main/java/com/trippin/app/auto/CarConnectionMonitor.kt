@@ -1,6 +1,5 @@
 package com.trippin.app.auto
 
-import android.os.Build
 import androidx.car.app.connection.CarConnection
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -74,7 +73,7 @@ class CarConnectionMonitor(
             return
         }
 
-        val hardwareId = "aa_${Build.MODEL}_${Build.DEVICE}"
+        val hardwareId = CarHardwareIds.resolve()
         val inForeground = ProcessLifecycleOwner.get().lifecycle.currentState
             .isAtLeast(Lifecycle.State.STARTED)
 

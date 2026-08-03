@@ -28,6 +28,9 @@ interface RefuelDao {
     @Query("SELECT * FROM refuel_events ORDER BY timestamp DESC")
     suspend fun getAllOnce(): List<RefuelEvent>
 
+    @Query("SELECT * FROM refuel_events WHERE carId = :carId ORDER BY timestamp ASC")
+    suspend fun getByCarAscending(carId: String): List<RefuelEvent>
+
     @Query("DELETE FROM refuel_events WHERE id = :id")
     suspend fun delete(id: String)
 }

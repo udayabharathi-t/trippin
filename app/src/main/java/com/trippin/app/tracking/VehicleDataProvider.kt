@@ -3,13 +3,13 @@ package com.trippin.app.tracking
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
-import android.os.Build
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.tasks.await
-import kotlin.math.sqrt
+import com.trippin.app.tracking.VehicleDataCache
+import com.trippin.app.util.GeoUtils
 
 data class VehicleSnapshot(
     val odometerKm: Float? = null,
@@ -18,8 +18,15 @@ data class VehicleSnapshot(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val hardwareId: String? = null,
-    val vin: String? = null
+    val vin: String? = null,
+    val distanceSource: DistanceSource = DistanceSource.UNKNOWN
 )
+
+enum class DistanceSource {
+    CAR_ODOMETER,
+    GPS_ESTIMATE,
+    UNKNOWN
+}
 
 class VehicleDataProvider(context: Context) {
     private val fusedLocation: FusedLocationProviderClient =
@@ -29,6 +36,7 @@ class VehicleDataProvider(context: Context) {
     private var lastLongitude: Double? = null
     private var lastLocationTime: Long = 0
     private var gpsSpeedKmh: Float = 0f
+    private var gpsDistanceKm: Float = 0f
 
     @SuppressLint("MissingPermission")
     suspend fun captureSnapshot(): VehicleSnapshot {
@@ -41,29 +49,53 @@ class VehicleDataProvider(context: Context) {
 
         location?.let { updateFromLocation(it) }
 
-        val carProps = readCarProperties()
+        val carData = VehicleDataCache.get()
+        val odometerKm = carData.odometerKm
+        val fuelPercent = carData.fuelPercent
+        val carSpeed = carData.speedKmh
+
+        val distanceSource = when {
+            odometerKm != null -> DistanceSource.CAR_ODOMETER
+            gpsDistanceKm > 0f -> DistanceSource.GPS_ESTIMATE
+            else -> DistanceSource.UNKNOWN
+        }
+
+        val hardwareId = buildHardwareId(carData)
 
         return VehicleSnapshot(
-            odometerKm = carProps.odometerKm,
-            fuelPercent = carProps.fuelPercent,
-            speedKmh = carProps.speedKmh ?: gpsSpeedKmh,
+            odometerKm = odometerKm,
+            fuelPercent = fuelPercent,
+            speedKmh = carSpeed ?: gpsSpeedKmh,
             latitude = lastLatitude,
             longitude = lastLongitude,
-            hardwareId = carProps.hardwareId,
-            vin = carProps.vin
+            hardwareId = hardwareId,
+            distanceSource = distanceSource
         )
+    }
+
+    fun gpsEstimatedDistanceKm(): Float = gpsDistanceKm
+
+    private fun buildHardwareId(carData: VehicleDataCache.Snapshot): String {
+        val parts = listOfNotNull(carData.carMake, carData.carModel, carData.carYear?.toString())
+        if (parts.isNotEmpty()) {
+            return parts.joinToString("_").replace(" ", "-")
+        }
+        return "aa_unknown_car"
     }
 
     private fun updateFromLocation(location: Location) {
         val now = System.currentTimeMillis()
         if (lastLatitude != null && lastLongitude != null && lastLocationTime > 0) {
             val dtHours = (now - lastLocationTime) / 3_600_000f
+            val segmentKm = GeoUtils.haversineKm(
+                lastLatitude!!, lastLongitude!!,
+                location.latitude, location.longitude
+            )
+            if (segmentKm > 0.01f) {
+                gpsDistanceKm += segmentKm
+            }
             if (dtHours > 0) {
-                val distanceKm = haversineKm(
-                    lastLatitude!!, lastLongitude!!,
-                    location.latitude, location.longitude
-                )
-                gpsSpeedKmh = (distanceKm / dtHours).coerceAtLeast(0f)
+                gpsSpeedKmh = (segmentKm / dtHours).coerceAtLeast(0f)
             }
         }
         lastLatitude = location.latitude
@@ -72,34 +104,5 @@ class VehicleDataProvider(context: Context) {
         if (location.hasSpeed()) {
             gpsSpeedKmh = location.speed * 3.6f
         }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun readCarProperties(): CarProperties {
-        return try {
-            val hardwareId = Build.MODEL + "_" + Build.DEVICE
-            CarProperties(hardwareId = hardwareId)
-        } catch (_: Exception) {
-            CarProperties(hardwareId = Build.MODEL)
-        }
-    }
-
-    private data class CarProperties(
-        val odometerKm: Float? = null,
-        val fuelPercent: Float? = null,
-        val speedKmh: Float? = null,
-        val hardwareId: String? = null,
-        val vin: String? = null
-    )
-
-    private fun haversineKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
-        val r = 6371.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-            kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
-            kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2)
-        val c = 2 * kotlin.math.atan2(sqrt(a), sqrt(1 - a))
-        return (r * c).toFloat()
     }
 }

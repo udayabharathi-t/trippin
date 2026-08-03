@@ -9,9 +9,11 @@ import com.trippin.app.data.model.Car
 import com.trippin.app.data.model.Trip
 import com.trippin.app.data.model.TripSample
 import com.trippin.app.data.model.TripStop
+import com.trippin.app.tracking.FuelAllocationCalculator
 import com.trippin.app.tracking.TripLiveStats
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
+import com.trippin.app.util.GeoUtils
 import kotlin.math.max
 
 class TripRepository(
@@ -60,7 +62,6 @@ class TripRepository(
         val avgSpeed = if (durationHours > 0) distance / durationHours else 0f
 
         val lastLocation = samples.lastOrNull { it.latitude != null }
-        val fuelCost = estimateFuelCost(trip.carId, trip.startFuelPercent, endFuelPercent)
 
         tripDao.update(
             trip.copy(
@@ -72,8 +73,6 @@ class TripRepository(
                 distanceKm = distance,
                 endLatitude = lastLocation?.latitude ?: trip.endLatitude,
                 endLongitude = lastLocation?.longitude ?: trip.endLongitude,
-                estimatedFuelCostInr = fuelCost?.first,
-                fuelPricePerLitreInr = fuelCost?.second,
                 isActive = false
             )
         )
@@ -98,7 +97,6 @@ class TripRepository(
             trip.maxSpeedKmh,
             samples.mapNotNull { it.speedKmh }.maxOrNull() ?: 0f
         )
-        val fuelCost = estimateFuelCost(trip.carId, trip.startFuelPercent, endFuel)
         val lastLocation = samples.lastOrNull { it.latitude != null }
 
         val updated = trip.copy(
@@ -107,8 +105,6 @@ class TripRepository(
             distanceKm = distance,
             averageSpeedKmh = avgSpeed,
             maxSpeedKmh = maxSpeed,
-            estimatedFuelCostInr = fuelCost?.first,
-            fuelPricePerLitreInr = fuelCost?.second,
             endLatitude = lastLocation?.latitude ?: trip.endLatitude,
             endLongitude = lastLocation?.longitude ?: trip.endLongitude
         )
@@ -133,6 +129,8 @@ class TripRepository(
     }
 
     fun computeFuelEconomyKmPerLitre(trip: Trip, car: Car?, fuelPercent: Float?): Float? {
+        FuelAllocationCalculator.fuelEconomyKmPerLitre(trip)?.let { return it }
+
         val start = trip.startFuelPercent ?: return null
         val end = fuelPercent ?: trip.endFuelPercent ?: return null
         val capacity = car?.maxFuelCapacityLitres ?: return null
@@ -180,7 +178,6 @@ class TripRepository(
         val durationHours = (endTime - startTime).coerceAtLeast(1L) / 3_600_000f
         val avgSpeed = if (durationHours > 0f) totalDistance / durationHours else 0f
         val maxSpeed = sorted.maxOf { it.maxSpeedKmh }
-        val fuelCost = estimateFuelCost(first.carId, first.startFuelPercent, last.endFuelPercent)
 
         val mergedName = first.name?.let { name ->
             if (sorted.size > 1) "$name (+${sorted.size - 1} segments)" else name
@@ -205,8 +202,6 @@ class TripRepository(
             endLatitude = last.endLatitude,
             endLongitude = last.endLongitude,
             endLocationName = last.endLocationName,
-            estimatedFuelCostInr = fuelCost?.first,
-            fuelPricePerLitreInr = fuelCost?.second,
             isActive = false,
             autoStarted = false,
             isMerged = true
@@ -233,6 +228,8 @@ class TripRepository(
         if (stops.isNotEmpty()) {
             stopDao.insertAll(stops)
         }
+
+        recalculateFuelAllocationsForCar(first.carId)
 
         return MergeResult.Success(merged)
     }
@@ -266,19 +263,43 @@ class TripRepository(
         tripDao.update(updated)
     }
 
-    private suspend fun estimateFuelCost(
-        carId: String,
-        startFuel: Float?,
-        endFuel: Float?
-    ): Pair<Float, Float>? {
-        val car = carDao.getById(carId) ?: return null
-        val lastRefuel = refuelDao.getLatestForCar(carId) ?: return null
-        if (startFuel == null || endFuel == null) return null
+    suspend fun recomputeTripDistancesFromGpsForCar(carId: String) {
+        val trips = tripDao.getByCarAscending(carId)
+        trips.forEach { trip ->
+            if (trip.isActive) return@forEach
+            val samples = sampleDao.getForTrip(trip.id)
+            val distance = computeDistanceKm(trip, samples, trip.endOdometerKm)
+            if (distance != trip.distanceKm) {
+                tripDao.update(trip.copy(distanceKm = distance))
+            }
+        }
+    }
 
-        val fuelUsedPercent = (startFuel - endFuel).coerceAtLeast(0f)
-        val litresUsed = (fuelUsedPercent / 100f) * car.maxFuelCapacityLitres
-        val cost = litresUsed * lastRefuel.fuelPricePerLitreInr
-        return cost to lastRefuel.fuelPricePerLitreInr
+    suspend fun recalculateFuelAllocationsForCar(carId: String): List<FuelAllocationCalculator.PeriodSummary> {
+        recomputeTripDistancesFromGpsForCar(carId)
+
+        val refuels = refuelDao.getByCarAscending(carId)
+        val trips = tripDao.getByCarAscending(carId)
+
+        tripDao.clearFuelCostsForCar(carId)
+
+        val (allocations, summaries) = FuelAllocationCalculator.allocateForCar(refuels, trips)
+        allocations.forEach { allocation ->
+            val trip = tripDao.getById(allocation.tripId) ?: return@forEach
+            tripDao.update(
+                trip.copy(
+                    estimatedFuelCostInr = allocation.estimatedFuelCostInr,
+                    fuelPricePerLitreInr = allocation.fuelPricePerLitreInr
+                )
+            )
+        }
+        return summaries
+    }
+
+    suspend fun backfillMetricsForAllCars() {
+        carDao.getAll().forEach { car ->
+            recalculateFuelAllocationsForCar(car.id)
+        }
     }
 
     private fun computeDistanceKm(
@@ -291,6 +312,17 @@ class TripRepository(
         if (startOdo != null && endOdo != null && endOdo >= startOdo) {
             return endOdo - startOdo
         }
+
+        val gpsPoints = samples.mapNotNull { sample ->
+            if (sample.latitude != null && sample.longitude != null) {
+                sample.latitude to sample.longitude
+            } else {
+                null
+            }
+        }
+        val gpsDistance = GeoUtils.pathDistanceKm(gpsPoints)
+        if (gpsDistance > 0f) return gpsDistance
+
         return trip.distanceKm
     }
 }
