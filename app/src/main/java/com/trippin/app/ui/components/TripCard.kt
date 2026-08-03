@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.trippin.app.data.model.Trip
+import com.trippin.app.tracking.FuelAllocationCalculator
 import com.trippin.app.util.Formatters
 
 @Composable
@@ -70,10 +71,17 @@ fun TripCard(
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text("Distance: ${Formatters.km(trip.distanceKm)} · Avg: ${Formatters.speed(trip.averageSpeedKmh)}")
-                trip.estimatedFuelCostInr?.let {
-                    Text("Est. fuel: ${Formatters.inr(it)}")
+                trip.estimatedFuelCostInr?.let { cost ->
+                    Text("Fuel cost: ${Formatters.inr(cost)}")
+                    val kmPerL = FuelAllocationCalculator.fuelEconomyKmPerLitre(trip)
+                    if (kmPerL != null) {
+                        Text(
+                            Formatters.fuelEconomy(kmPerL),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     Text(
-                        "Approx. based on last refill",
+                        "Split from full-tank refill by GPS distance",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

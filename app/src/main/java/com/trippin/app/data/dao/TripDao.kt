@@ -46,6 +46,12 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<String>): List<Trip>
 
+    @Query("SELECT * FROM trips WHERE carId = :carId ORDER BY startTime ASC")
+    suspend fun getByCarAscending(carId: String): List<Trip>
+
+    @Query("UPDATE trips SET estimatedFuelCostInr = NULL, fuelPricePerLitreInr = NULL WHERE carId = :carId")
+    suspend fun clearFuelCostsForCar(carId: String)
+
     @Query("DELETE FROM trips WHERE id = :id")
     suspend fun delete(id: String)
 }

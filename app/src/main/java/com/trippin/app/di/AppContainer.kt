@@ -34,7 +34,8 @@ class AppContainer(context: Context) {
         carDao = database.carDao(),
         tripDao = database.tripDao(),
         tripSampleDao = database.tripSampleDao(),
-        vehicleDataProvider = vehicleDataProvider
+        vehicleDataProvider = vehicleDataProvider,
+        tripRepository = tripRepository
     )
 
     val tripTracker = TripTracker(
